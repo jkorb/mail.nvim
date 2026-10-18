@@ -1,0 +1,149 @@
+*mail.nvim*  Plain-text email editing for Neovim
+
+SETUP                                                        *mail-setup*
+
+Install this repository with your plugin manager, and call setup before opening
+mail or when the mail filetype loads. Neovim detects .eml files and common
+Mutt/NeoMutt temporary files; use :setfiletype mail for other filenames.
+
+Defaults: >lua
+  require("mail").setup({
+    cmp_contacts = true,
+    contacts_eval = nil,
+    contacts_timeout = 3000, -- milliseconds
+    contacts_only = true, -- Blink: only contacts in address fields
+    treesitter = true,
+    parser = nil, -- preserve an existing nvim-treesitter parser registration
+  })
+<
+Neovim 0.11 or later is required. Setup may be called again to replace options.
+Navigation and contact completion work without Tree-sitter.
+
+GRAMMAR                                                      *mail-grammar*
+
+The custom mail grammar is distributed separately: >lua
+  require("mail").setup({
+    parser = { url = "https://github.com/jkorb/tree-sitter-mail" },
+  })
+<
+A local checkout works too: >lua
+  require("mail").setup({
+    parser = { path = vim.fn.expand("~/path/to/tree-sitter-mail") },
+  })
+<
+Load nvim-treesitter before mail.nvim, then run :TSInstall mail. The main branch
+of nvim-treesitter requires Neovim 0.12+; its legacy master branch works with
+0.11. Both parser registration APIs are supported. For a remote grammar you can
+also set parser.revision to a commit hash or parser.branch to a branch name.
+
+mail.nvim starts the mail highlighter when a mail buffer opens, including
+buffers open when setup runs. Restart Neovim after installing or updating a
+parser. :checkhealth mail checks the installed parser and query compatibility.
+If a query reports an invalid node type, rebuild the parser or run :TSInstall!
+mail, then restart Neovim. :TSInstall mail skips an already installed parser;
+:TSUpdate mail may also skip a local grammar without a pinned revision.
+Custom queries must also use node names from the current grammar (for example,
+body instead of the older text_block).
+
+:TSInstall markdown markdown_inline enables Markdown inside the body. Quoted
+mail uses six highlight levels; deeper quotes use level six. To display the
+quote bars, set conceallevel in a mail FileType autocmd: >lua
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "mail",
+    callback = function() vim.wo.conceallevel = 2 end,
+  })
+<
+CONTACTS                                                     *mail-contacts*
+
+Enable the source named cmp-contacts in nvim-cmp: >lua
+  require("cmp").setup.filetype("mail", {
+    sources = { { name = "cmp-contacts" } },
+  })
+<
+Or add it to blink.cmp through blink.compat: >lua
+  -- blink.compat must be installed and its cmp impersonation enabled.
+  require("blink.compat").setup({ impersonate_nvim_cmp = true })
+  require("blink.cmp").setup({
+    sources = {
+      default = { "contacts" }, -- append to your existing sources
+      providers = {
+        contacts = {
+          name = "cmp-contacts",
+          module = "blink.compat.source",
+        },
+      },
+    },
+  })
+<
+With blink.cmp, address values use only the contact provider by default. The
+subject and body keep your existing sources, including any mail-specific list
+or function. Set contacts_only = false to keep all sources in address fields.
+This works with providers named cmp-contacts or an alias such as contacts above;
+no global completion changes are needed. It also applies to folded address
+lines and Reply-To/Resent headers. The source must still be configured in Blink.
+For nvim-cmp, source selection follows your cmp.setup.filetype or
+cmp.setup.buffer configuration.
+
+Set contacts_eval to a command that returns a JSON array of name/address maps.
+For example: >
+  [{"Alice Smith":"alice@example.org"},{"":"bob@example.org"}]
+<
+The placeholder {input} is replaced with the current recipient being typed.
+Display-name quotes are removed for searching; inside <...>, the lookup receives
+the address being typed. Selecting a contact replaces the whole recipient.
+A string command runs in Neovim's shell; the plugin shell-escapes the input.
+Leave {input} unquoted in the template. An argument list avoids the shell: >lua
+  require("mail").setup({
+    contacts_eval = { "/path/to/fetch_contacts", "{input}" },
+  })
+<
+The command can omit {input} and return all contacts. Names containing quotes or
+backslashes are escaped for insertion. Empty names insert a bare address.
+Malformed entries and duplicate suggestions are ignored. Failed commands,
+invalid JSON and timeouts return no suggestions; older requests are cancelled
+when another begins. No lookup runs from :checkhealth mail.
+
+Completion is available in To, Cc, Bcc, From, Sender, Reply-To and their Resent-
+variants, including empty fields and folded recipient lists. It stays out of
+header labels, the subject and the body. Completing a name that itself spans
+multiple lines is unsupported. contacts_timeout defaults to 3000 milliseconds.
+
+NAVIGATION                                                   *mail-navigation*
+
+On first opening a mail buffer, a nonempty In-Reply-To header places the cursor
+at the first body line. Other messages start at the To value. Switching buffers
+or rerunning setup preserves the cursor. Initial placement stays in Normal mode;
+press A to append to an empty header value.
+
+These buffer-local commands jump without changing the message: >
+  :MailTo       :MailCc       :MailBcc       :MailSubject       :MailBody
+<
+Missing fields are left alone. No keys are mapped. For example: >lua
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "mail",
+    callback = function(event)
+      vim.keymap.set("n", "<localleader>b", "<cmd>MailBody<cr>", { buffer = event.buf })
+    end,
+  })
+<
+Lua callers can use require("mail.navigation").jump("body") or a lowercase
+header name. It returns true on success and false when the target is absent.
+
+TESTS                                                        *mail-tests*
+
+Run `make test` from the repository. For grammar/query integration checks, set
+MAIL_NVIM_PARSER to an absolute path to the compiled mail parser: >
+  MAIL_NVIM_PARSER=/path/to/mail.so make test
+<
+Tests use synthetic contacts and temporary Neovim state under tmp/.
+
+`make test-integration` also tests real dependencies. Set MAIL_NVIM_CMP to an
+nvim-cmp checkout and/or MAIL_NVIM_BLINK_COMPAT to a blink.compat checkout.
+Set MAIL_NVIM_BLINK to a blink.cmp checkout to also test source selection.
+To test parser installation, set MAIL_NVIM_TREESITTER to an nvim-treesitter main
+checkout and MAIL_NVIM_GRAMMAR to a disposable copy of the grammar. The installer
+builds inside that copy and installs under tmp/installed. All paths are absolute.
+MAIL_NVIM_MARKDOWN_PARSERS can point to a directory containing markdown.so and
+markdown_inline.so to check highlighting inside the body too.
+
+vim:tw=78:ts=8:ft=help:norl:
