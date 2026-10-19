@@ -11,7 +11,7 @@ Defaults: >lua
     cmp_contacts = true,
     contacts_eval = nil,
     contacts_timeout = 3000, -- milliseconds
-    contacts_only = true, -- Blink: only contacts in address fields
+    contacts_only = true, -- Blink: only contacts during address completion
     treesitter = true,
     parser = nil, -- preserve an existing nvim-treesitter parser registration
   })
@@ -75,9 +75,10 @@ Or add it to blink.cmp through blink.compat: >lua
     },
   })
 <
-With blink.cmp, address values use only the contact provider by default. The
-subject and body keep your existing sources, including any mail-specific list
-or function. Set contacts_only = false to keep all sources in address fields.
+With blink.cmp, address values and body @lookups use only the contact provider
+by default. Elsewhere, your existing sources are preserved, including any
+mail-specific list or function. Set contacts_only = false to keep all sources
+during contact completion.
 This works with providers named cmp-contacts or an alias such as contacts above;
 no global completion changes are needed. It also applies to folded address
 lines and Reply-To/Resent headers. The source must still be configured in Blink.
@@ -105,8 +106,13 @@ when another begins. No lookup runs from :checkhealth mail.
 
 Completion is available in To, Cc, Bcc, From, Sender, Reply-To and their Resent-
 variants, including empty fields and folded recipient lists. It stays out of
-header labels, the subject and the body. Completing a name that itself spans
-multiple lines is unsupported. contacts_timeout defaults to 3000 milliseconds.
+header labels and the subject. Completing a name that itself spans multiple
+lines is unsupported. contacts_timeout defaults to 3000 milliseconds.
+
+In the body, type @ followed by a name to look up a contact (for example,
+"Ask @Alice"). Selecting a contact inserts @"Alice" <alice@example.org>, keeping
+the @, name and address. The lookup ends at whitespace or punctuation.
+An @ inside an existing address does not trigger contact completion.
 
 NAVIGATION                                                   *mail-navigation*
 

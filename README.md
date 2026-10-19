@@ -4,7 +4,7 @@ A small Neovim plugin for editing plain-text email.
 
 - 🧭 Start new messages at `To:` and replies at the body; keep your place when returning.
 - 🎨 Highlight headers, nested quotes, and Markdown with a custom Tree-sitter grammar.
-- 📇 Complete contacts in address fields with nvim-cmp or blink.compat.
+- 📇 Complete contacts in address fields or type `@name` in the body, with nvim-cmp or blink.compat.
 
 Install this repo and [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter), then call:
 

@@ -66,9 +66,14 @@ if cmp_path then
   check(instance, "source not registered with nvim-cmp")
   for _, line in ipairs({
     "To: Ali", "To: a@example.org,Ali", "To: é@example.org, Ali", 'To: "Ali',
-    'To: Old Name <ali', 'To: alice@',
+    'To: Old Name <ali', 'To: alice@', "@", "Ask @Ali", "Écrire à @alice",
   }) do
-    setup_buffer(line)
+    local body = not line:match("^To:")
+    local buf = setup_buffer(body and "To: " or line)
+    if body then
+      vim.api.nvim_buf_set_lines(buf, 3, 4, false, { line })
+      vim.api.nvim_win_set_cursor(0, { 4, #line })
+    end
     local ctx = require("cmp.context").new({}, { reason = require("cmp.types").cmp.ContextReason.Manual })
     local done = false
     instance:complete(ctx, function() done = true end)
@@ -84,7 +89,11 @@ if cmp_path then
     local edit = alice.completion_item.textEdit
     vim.api.nvim_buf_set_text(0, edit.range.start.line, edit.range.start.character,
       edit.range["end"].line, edit.range["end"].character, { edit.newText })
-    check(vim.api.nvim_get_current_line():match('"Alice" <alice@example.org>$'), "completion edit not applied")
+    if body then
+      check(vim.api.nvim_get_current_line() == line:gsub("@.*$", '@"Alice" <alice@example.org>'), "body completion edit not applied")
+    else
+      check(vim.api.nvim_get_current_line():match('"Alice" <alice@example.org>$'), "completion edit not applied")
+    end
   end
 end
 local compat_path = vim.env.MAIL_NVIM_BLINK_COMPAT
@@ -114,6 +123,11 @@ if vim.env.MAIL_NVIM_BLINK then
   local result = vim.system({ vim.v.progpath, "--headless", "-u", "NONE", "-i", "NONE", "-l", "tests/blink.lua" },
     { text = true }):wait(15000)
   check(result.code == 0, "Blink integration failed: " .. (result.stderr or "") .. (result.stdout or ""))
+  io.write(result.stdout or "")
+  io.write(result.stderr or "")
+  result = vim.system({ vim.v.progpath, "--headless", "-u", "NONE", "-i", "NONE", "-c", "luafile tests/blink-input.lua" },
+    { text = true }):wait(15000)
+  check(result.code == 0, "Blink input integration failed: " .. (result.stderr or "") .. (result.stdout or ""))
   io.write(result.stdout or "")
   io.write(result.stderr or "")
 end

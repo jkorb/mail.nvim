@@ -6,6 +6,9 @@ function M.reset()
   if installed and config and config.sources.per_filetype.mail == installed.select then
     config.sources.per_filetype.mail = installed.previous
   end
+  if installed then
+    vim.api.nvim_del_augroup_by_id(installed.group)
+  end
   installed = nil
 end
 
@@ -43,8 +46,46 @@ function M.configure(contacts)
     end
     return previous or { inherit_defaults = true }
   end
-  installed = { previous = previous, select = select_sources }
+  local group = vim.api.nvim_create_augroup("mail_nvim_blink", { clear = true })
+  local current = { previous = previous, select = select_sources, group = group }
+  installed = current
   per_filetype.mail = select_sources
+
+  -- Blink reuses a context's providers while typing. Refresh the list when a
+  -- paste, deletion or cursor movement crosses into/out of contact completion.
+  local pending = false
+  vim.api.nvim_create_autocmd({ "TextChangedI", "CursorMovedI" }, {
+    group = group,
+    callback = function(event)
+      if pending or vim.bo[event.buf].filetype ~= "mail" then
+        return
+      end
+      pending = true
+      vim.schedule(function()
+        pending = false
+        if installed ~= current or vim.api.nvim_get_current_buf() ~= event.buf
+          or vim.api.nvim_get_mode().mode:sub(1, 1) ~= "i"
+          or per_filetype.mail ~= select_sources then
+          return
+        end
+        local trigger = package.loaded["blink.cmp.completion.trigger"]
+        local context = trigger and trigger.context
+        local sources = package.loaded["blink.cmp.sources.lib"]
+        local blink = package.loaded["blink.cmp"]
+        if not context or context.bufnr ~= event.buf or context.trigger.kind == "prefetch"
+          or not sources or not blink then
+          return
+        end
+        if not contacts:is_available() and not vim.deep_equal(context.providers, { id }) then
+          return
+        end
+        local providers = sources.get_enabled_provider_ids("default")
+        if not vim.deep_equal(context.providers, providers) then
+          blink.show({ providers = providers })
+        end
+      end)
+    end,
+  })
 end
 
 return M

@@ -65,7 +65,7 @@ local function complete()
   local response
   require("blink.cmp.sources.lib.tree").new(ctx):get_completions(ctx, function(items) response = items end)
   eq(vim.wait(2000, function() return response ~= nil end, 5), true, "Blink completion timed out")
-  return response
+  return response, ctx
 end
 for _, name in ipairs({ "To", "From", "CC", "BCC", "Reply-To", "Resent-To" }) do
   buffer({ name .. ": Ali", "  Bob", "Subject: Hello", "", "To: body" })
@@ -85,11 +85,33 @@ response = complete()
 eq(response["cmp-contacts"], nil, "contacts shown in body")
 eq(calls.dictionary, 1, "dictionary did not resume in body")
 calls = {}
+for _, line in ipairs({ "@", "Ask @Ali", "Écrire à @alice" }) do
+  buffer({ "To: ", "Subject: Hello", "", line })
+  eq(select(4, #line), { "cmp-contacts" }, "body @ includes other sources")
+  eq(require("blink.cmp.completion.trigger").is_trigger_character("@"), true, "Blink ignores @ trigger")
+  local items, ctx = complete()
+  local filtered = require("blink.cmp.completion.list").fuzzy(ctx, items)
+  local alice
+  for _, item in ipairs(filtered) do
+    if item.label == '"Alice" <alice@example.org>' then alice = item end
+  end
+  eq(alice ~= nil, true, "Blink filtered body contact")
+  eq(calls, {}, "body @ queried unrelated providers")
+  local edit = alice.textEdit
+  vim.api.nvim_buf_set_text(0, edit.range.start.line, edit.range.start.character,
+    edit.range["end"].line, edit.range["end"].character, { edit.newText })
+  eq(vim.api.nvim_get_current_line(), (line:gsub("@.*$", '@"Alice" <alice@example.org>')), "Blink body edit lost @ or damaged text")
+  eq(select(4, #vim.api.nvim_get_current_line()), defaults, "accepting body contact did not restore sources")
+end
+buffer({ "To: ", "Subject: Hello", "", "Ask @Nobody" })
 for _, mode in ipairs({ "empty", "slow" }) do
   mail.setup({ treesitter = false, contacts_eval = provider(mode), contacts_timeout = 20 })
   select(1, 4)
   eq(complete(), {}, "empty/slow contacts should produce an empty menu")
   eq(calls, {}, "empty/slow contacts triggered fallback providers")
+  select(4, #"Ask @Nobody")
+  eq(complete(), {}, "empty/slow body lookup should produce an empty menu")
+  eq(calls, {}, "empty/slow body lookup triggered fallback providers")
 end
 mail.setup({ treesitter = false, contacts_eval = provider(), contacts_only = false })
 eq(select(1, 4), defaults, "opt-out did not restore sources")

@@ -1,17 +1,48 @@
 local source = {}
 local headers = require("mail.headers")
 
+-- A standalone @ starts a body lookup; an @ inside an email address does not.
+-- Stop at punctuation/whitespace so the surrounding sentence stays intact.
+local function body_recipient(buf, row, col)
+  if not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].filetype ~= "mail" then
+    return nil
+  end
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, row, false)
+  local _, separator = headers.parse(lines)
+  if not separator or row <= separator then
+    return nil
+  end
+  local line = lines[row] or ""
+  local first, input = line:sub(1, col):match("()@([%w_\128-\255%-]*)$")
+  if not first then
+    return nil
+  end
+  local previous = line:sub(first - 1, first - 1)
+  if first > 1 and not previous:match("[%s%(%[%{<\"']") then
+    return nil
+  end
+  local suffix = line:sub(col + 1):match("^[%w_\128-\255%-]*")
+  return input, {
+    start = { line = row - 1, character = first - 1 },
+    ["end"] = { line = row - 1, character = col + #suffix },
+  }
+end
+
 function source.new(config)
   return setmetatable({ config = config or {} }, { __index = source })
 end
 
 function source:get_keyword_pattern()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  if body_recipient(vim.api.nvim_get_current_buf(), cursor[1], cursor[2]) then
+    return [[@\S*]]
+  end
   -- Keep names with spaces together, but never consume a recipient separator.
   return [[[^[:space:],;:<>"][^,;:<>"]*]]
 end
 
 function source:get_trigger_characters()
-  return { ":", ",", " " }
+  return { ":", ",", " ", "@" }
 end
 
 function source:is_available()
@@ -19,7 +50,9 @@ function source:is_available()
     return false
   end
   local cursor = vim.api.nvim_win_get_cursor(0)
-  return headers.address_field(vim.api.nvim_get_current_buf(), cursor[1], cursor[2]) ~= nil
+  local buf = vim.api.nvim_get_current_buf()
+  return headers.address_field(buf, cursor[1], cursor[2]) ~= nil
+    or body_recipient(buf, cursor[1], cursor[2]) ~= nil
 end
 
 function source:get_debug_name()
@@ -137,7 +170,7 @@ local function command_for(template, input)
   end
 end
 
-local function decode_items(output, range, filter_prefix)
+local function decode_items(output, range, filter_prefix, body)
   local ok, contacts = pcall(vim.json.decode, output)
   if not ok or type(contacts) ~= "table" or not vim.islist(contacts) then
     return nil
@@ -154,12 +187,14 @@ local function decode_items(output, range, filter_prefix)
           end
           if not seen[label] then
             seen[label] = true
+            local text = body and ("@" .. label) or label
             items[#items + 1] = {
               label = label,
-              filterText = filter_prefix and (filter_prefix .. address .. " " .. name) or label,
+              filterText = body and ("@" .. name .. " " .. address)
+                or (filter_prefix and (filter_prefix .. address .. " " .. name) or label),
               sortText = label:lower(),
-              insertText = label,
-              textEdit = { newText = label, range = vim.deepcopy(range) },
+              insertText = text,
+              textEdit = { newText = text, range = vim.deepcopy(range) },
               kind = vim.lsp.protocol.CompletionItemKind.Text,
             }
           end
@@ -185,11 +220,16 @@ function source:complete(params, callback)
   self:cancel()
   local context = params.context
   local field = headers.address_field(context.bufnr, context.cursor.row, #context.cursor_before_line)
-  if not self.config.contacts_eval or not field then
+  if not self.config.contacts_eval then
     callback({ items = {}, isIncomplete = false })
     return
   end
-  local input, range, filter_prefix = recipient(context, field)
+  local input, range, filter_prefix
+  if field then
+    input, range, filter_prefix = recipient(context, field)
+  else
+    input, range = body_recipient(context.bufnr, context.cursor.row, #context.cursor_before_line)
+  end
   if not input then
     callback({ items = {}, isIncomplete = false })
     return
@@ -227,7 +267,7 @@ function source:complete(params, callback)
     on_stdout = function(_, data) request.output = table.concat(data or {}, "\n") end,
     on_exit = function(_, code)
       vim.schedule(function()
-        local items = code == 0 and decode_items(request.output, range, filter_prefix) or nil
+        local items = code == 0 and decode_items(request.output, range, filter_prefix, not field) or nil
         -- Queries may be filtered by the command, so ask again as input changes.
         request.finish(items or {}, true)
       end)

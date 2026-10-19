@@ -151,6 +151,51 @@ check(vim.wait(2000, function() return callbacks[1] and callbacks[2] end, 5), "s
 eq(callbacks[1].items, {}, "old request cancelled")
 eq(#callbacks[2].items, 3, "new request completed")
 
+-- Body lookups replace only a standalone @name, including text after the cursor.
+check(vim.tbl_contains(src:get_trigger_characters(), "@"), "@ triggers contacts")
+for _, case in ipairs({
+  { "@", "", 0, nil, '@"Alice" <alice@example.org>' },
+  { "Ask @Ali", "Ali", 4, nil, 'Ask @"Alice" <alice@example.org>' },
+  { "Écrire à @Éloïse", "Éloïse", #"Écrire à ", nil, 'Écrire à @"Alice" <alice@example.org>' },
+  { "Contact (@Alice)", "Alice", 9, #"Contact (@Alice", 'Contact (@"Alice" <alice@example.org>)' },
+  { "Ask @Alice, please.", "Ali", 4, #"Ask @Ali", 'Ask @"Alice" <alice@example.org>, please.' },
+  { "Ask @Alice or @Bob", "Bob", #"Ask @Alice or ", nil, 'Ask @Alice or @"Alice" <alice@example.org>' },
+}) do
+  local body = buffer({ "To: ", "Subject: Hi", "", case[1] })
+  local col = case[4] or #case[1]
+  vim.api.nvim_win_set_cursor(0, { 4, col })
+  check(src:is_available(), "body trigger: " .. case[1])
+  local keyword = vim.regex("\\%(" .. src:get_keyword_pattern() .. "\\)$")
+  eq(keyword:match_str(case[1]:sub(1, col)), case[3], "body keyword starts at @")
+  local items = complete(source.new({ contacts_eval = provider("echo") }), params(body, 4, col)).items
+  local expected = case[2] == "" and "echo@example.org" or '"' .. case[2] .. '" <echo@example.org>'
+  eq(items[1].label, expected, "body lookup omits @")
+  eq(items[1].insertText, "@" .. expected, "body keeps @ and full contact")
+  local body_edit = complete(src, params(body, 4, col)).items[2].textEdit
+  vim.api.nvim_buf_set_text(body, body_edit.range.start.line, body_edit.range.start.character,
+    body_edit.range["end"].line, body_edit.range["end"].character, { body_edit.newText })
+  eq(vim.api.nvim_buf_get_lines(body, 3, 4, false)[1], case[5], "body edit preserves surrounding text")
+end
+
+for _, text in ipairs({ "Plain body", "alice@example.org", "https://example.org/@Ali",
+  "@@Ali", "\\@Ali", "Ask @Ali ", "Ask @Ali,", "Ask @Ali.", "Ask @Ali/" }) do
+  local body = buffer({ "To: ", "", text })
+  vim.api.nvim_win_set_cursor(0, { 3, #text })
+  eq(src:is_available(), false, "not a body lookup: " .. text)
+  eq(complete(src, params(body, 3)).items, {}, "no lookup without a body trigger")
+end
+for _, case in ipairs({
+  { { "To: ", "Subject: @Ali" }, 2, "mail" },
+  { { "To: ", " @Ali" }, 2, "text" },
+  { { "@Ali" }, 1, "mail" },
+  { { "To: ", "", "@Ali" }, 3, "text" },
+}) do
+  local body = buffer(case[1], case[3])
+  vim.api.nvim_win_set_cursor(0, { case[2], #case[1][case[2]] })
+  eq(src:is_available(), false, "body completion requires a mail body")
+  eq(complete(src, params(body, case[2])).items, {}, "invalid body context has no contacts")
+end
+
 -- Shell interpolation must preserve percent signs, quotes and metacharacters.
 local shell_input = "50% O'Brien $(mail_nvim_should_not_run)"
 buf = buffer({ "To: " .. shell_input, "", "" })
