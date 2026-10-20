@@ -12,8 +12,12 @@ function M.setup()
       return
     end
     navigation.attach(buf)
+    require("mail.images").attach(buf)
     require("mail").register_completion()
     require("mail.treesitter").start(buf)
+    require("mail.view").attach(buf)
+    require("mail.folds").sync()
+    require("mail.check").attach(buf)
     if pending[buf] or vim.b[buf].mail_initial_cursor then
       return
     end

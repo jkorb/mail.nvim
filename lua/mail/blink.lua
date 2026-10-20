@@ -38,7 +38,7 @@ function M.configure(contacts)
   local id = vim.tbl_contains(ids, "cmp-contacts") and "cmp-contacts" or ids[1]
   local previous = per_filetype.mail
   local function select_sources()
-    if contacts:is_available() then
+    if contacts:is_exclusive() then
       return { id }
     end
     if type(previous) == "function" then
@@ -76,7 +76,7 @@ function M.configure(contacts)
           or not sources or not blink then
           return
         end
-        if not contacts:is_available() and not vim.deep_equal(context.providers, { id }) then
+        if not contacts:is_exclusive() and not vim.deep_equal(context.providers, { id }) then
           return
         end
         local providers = sources.get_enabled_provider_ids("default")

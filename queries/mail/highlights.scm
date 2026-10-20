@@ -38,9 +38,9 @@
 (body) @spell
 (quoted_text) @comment
 
-(quoted_lvl1 (quote_symbol) @markup.heading.1 (#set! conceal "┃"))
-(quoted_lvl2 (quote_symbol) @markup.heading.2 (#set! conceal "┃"))
-(quoted_lvl3 (quote_symbol) @markup.heading.3 (#set! conceal "┃"))
-(quoted_lvl4 (quote_symbol) @markup.heading.4 (#set! conceal "┃"))
-(quoted_lvl5 (quote_symbol) @markup.heading.5 (#set! conceal "┃"))
-(quoted_lvl6 (quote_symbol) @markup.heading.6 (#set! conceal "┃"))
+(quoted_lvl1 (quote_symbol) @markup.heading.1)
+(quoted_lvl2 (quote_symbol) @markup.heading.2)
+(quoted_lvl3 (quote_symbol) @markup.heading.3)
+(quoted_lvl4 (quote_symbol) @markup.heading.4)
+(quoted_lvl5 (quote_symbol) @markup.heading.5)
+(quoted_lvl6 (quote_symbol) @markup.heading.6)

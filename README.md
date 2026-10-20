@@ -3,8 +3,10 @@
 A small Neovim plugin for editing plain-text email.
 
 - 🧭 Start new messages at `To:` and replies at the body; keep your place when returning.
-- 🎨 Highlight headers, nested quotes, and Markdown with a custom Tree-sitter grammar.
-- 📇 Complete contacts in address fields or type `@name` in the body, with nvim-cmp or blink.compat.
+- 🎨 Colored quote bars, links, and aligned Markdown tables. Toggle the view with `:MailViewToggle` or `<localleader>mv`; disable by default with `view = false`.
+- 📇 Complete contacts with `@name` and phrases with `!best`, `!groetjes`, or `!sounds`, using nvim-cmp or blink.compat. Customize `phrases` for your own sign-offs.
+- 🖼️ Pick inline images with `:MailImage` or `<localleader>mi`; requires `nnn` and a Markdown-to-HTML mail workflow.
+- 🧵 Older nested replies fold away; the reply you're answering stays open. Check drafts with `:MailCheck`, or when quitting with `:q` / `:wq`.
 
 Install this repo and [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter), then call:
 

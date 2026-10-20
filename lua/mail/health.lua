@@ -24,15 +24,20 @@ function M.check()
   else
     vim.health.info("Tree-sitter disabled")
   end
-  if config.cmp_contacts and config.contacts_eval then
+  if config.cmp_contacts and (config.contacts_eval or next(config.phrases)) then
     local ok = pcall(require, "cmp")
     if ok then
-      vim.health.ok("Contact source available; enable cmp-contacts in your completion sources")
+      vim.health.ok("Mail completion available; enable cmp-contacts in your completion sources")
     else
-      vim.health.warn("Contact completion needs nvim-cmp or blink.compat")
+      vim.health.warn("Mail completion needs nvim-cmp or blink.compat")
     end
   else
-    vim.health.info("Contact completion disabled or contacts_eval unset")
+    vim.health.info("Mail completion disabled, or contacts_eval and phrases are unset")
+  end
+  if vim.fn.executable(config.image_picker) == 1 then
+    vim.health.ok("Image picker available: " .. config.image_picker)
+  else
+    vim.health.info("Optional image picker missing: install nnn to use :MailImage")
   end
 end
 

@@ -95,6 +95,25 @@ if cmp_path then
       check(vim.api.nvim_get_current_line():match('"Alice" <alice@example.org>$'), "completion edit not applied")
     end
   end
+  for key, phrase in pairs({ best = "Best,\nJohannes", groetjes = "Groetjes,\nJohannes", sounds = "Sounds good to me." }) do
+    local buf = setup_buffer("To: ")
+    local line = "Écrire !" .. key:sub(1, 2)
+    vim.api.nvim_buf_set_lines(buf, 3, 4, false, { line })
+    vim.api.nvim_win_set_cursor(0, { 4, #line })
+    local ctx = require("cmp.context").new({}, { reason = require("cmp.types").cmp.ContextReason.Manual })
+    local done = false
+    instance:complete(ctx, function() done = true end)
+    check(vim.wait(2000, function() return done end, 5), "nvim-cmp phrase completion timed out")
+    local entries = require("cmp.utils.async").wrap(function() return instance:get_entries(ctx) end)():sync()
+    local found
+    for _, entry in ipairs(entries) do if entry.completion_item.label == "!" .. key then found = entry end end
+    check(found and not found:is_invalid(), "nvim-cmp filtered or rejected phrase " .. key)
+    local edit = found.completion_item.textEdit
+    vim.api.nvim_buf_set_text(buf, edit.range.start.line, edit.range.start.character,
+      edit.range["end"].line, edit.range["end"].character, vim.split(edit.newText, "\n", { plain = true }))
+    check(table.concat(vim.api.nvim_buf_get_lines(buf, 3, 3 + #vim.split(phrase, "\n"), false), "\n") == "Écrire " .. phrase,
+      "nvim-cmp phrase damaged multiline text")
+  end
 end
 local compat_path = vim.env.MAIL_NVIM_BLINK_COMPAT
 if compat_path then

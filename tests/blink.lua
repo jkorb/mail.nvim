@@ -103,6 +103,26 @@ for _, line in ipairs({ "@", "Ask @Ali", "Écrire à @alice" }) do
   eq(vim.api.nvim_get_current_line(), (line:gsub("@.*$", '@"Alice" <alice@example.org>')), "Blink body edit lost @ or damaged text")
   eq(select(4, #vim.api.nvim_get_current_line()), defaults, "accepting body contact did not restore sources")
 end
+for _, key in ipairs({ "best", "groetjes", "sounds" }) do
+  local line = "Reply !" .. key:sub(1, 2)
+  buffer({ "To: ", "Subject: Hi", "", line })
+  eq(select(4, #line), { "cmp-contacts" }, "phrase lookup includes other sources")
+  eq(require("blink.cmp.completion.trigger").is_trigger_character("!"), true, "Blink ignores phrase trigger")
+  calls = {}
+  local items, ctx = complete()
+  local filtered = require("blink.cmp.completion.list").fuzzy(ctx, items)
+  local found
+  for _, item in ipairs(filtered) do if item.label == "!" .. key then found = item end end
+  eq(found ~= nil, true, "Blink filtered phrase " .. key)
+  eq(calls, {}, "phrase lookup queried unrelated providers")
+  local edit = found.textEdit
+  vim.api.nvim_buf_set_text(0, edit.range.start.line, edit.range.start.character,
+    edit.range["end"].line, edit.range["end"].character, vim.split(edit.newText, "\n", { plain = true }))
+  local expected = "Reply " .. mail.config.phrases[key]
+  eq(table.concat(vim.api.nvim_buf_get_lines(0, 3, -1, false), "\n"), expected, "Blink phrase insertion changed text")
+  eq(select(vim.api.nvim_buf_line_count(0), #vim.api.nvim_buf_get_lines(0, -2, -1, false)[1]), defaults,
+    "phrase acceptance restores normal providers")
+end
 buffer({ "To: ", "Subject: Hello", "", "Ask @Nobody" })
 for _, mode in ipairs({ "empty", "slow" }) do
   mail.setup({ treesitter = false, contacts_eval = provider(mode), contacts_timeout = 20 })

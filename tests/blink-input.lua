@@ -106,6 +106,24 @@ local thread = coroutine.create(function()
   coroutine.yield(20)
   check(vim.deep_equal(require("blink.cmp.completion.trigger").context.providers, { "other" }),
     "ordinary body typing overrode a manual source selection")
+  local before_phrase = other_calls
+  vim.api.nvim_input(" !be")
+  wait_for(function() return only_contacts() and blink.get_items()[1].label == "!best" end,
+    "phrase trigger did not switch the menu to phrases")
+  check(other_calls == before_phrase, "phrase lookup queried an unrelated source")
+  coroutine.yield(150)
+  check(blink.get_items()[1].label == "!best", "phrase suggestion disappeared while waiting")
+  check(blink.accept({ index = 1 }), "Blink did not accept phrase")
+  wait_for(function() return vim.api.nvim_get_current_line() == "Johannes" end, "multiline signoff was not inserted")
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  check(vim.api.nvim_buf_get_lines(0, row - 2, row - 1, false)[1]:match(" Best,$"), "phrase trigger was not replaced")
+  vim.api.nvim_input(" Other")
+  wait_for(normal_completion, "ordinary completion did not resume after phrase")
+  vim.api.nvim_input(" !gro")
+  wait_for(function() return only_contacts() and blink.get_items()[1].label == "!groetjes" end,
+    "second phrase lookup did not open")
+  vim.api.nvim_input("<C-w><BS>Other")
+  wait_for(normal_completion, "deleting phrase trigger did not restore ordinary completion")
 end)
 
 local function step()

@@ -255,7 +255,7 @@ do
   eq(select(), { inherit_defaults = true }, "body resembling header keeps sources")
   mail.register_completion()
   eq(config.sources.per_filetype.mail, select, "registration does not nest selectors")
-  mail.setup({ treesitter = false, contacts_eval = provider(), contacts_only = false })
+  mail.setup({ treesitter = false, contacts_eval = provider(), contacts_only = false, phrases = {} })
   eq(config.sources.per_filetype.mail, nil, "opt-out restores absent mail config")
   local original = function() return { "spell", inherit_defaults = true } end
   config.sources.per_filetype.mail = original
@@ -263,7 +263,7 @@ do
   eq(config.sources.per_filetype.mail(), original(), "existing mail callback preserved in body")
   mail.setup({ treesitter = false, cmp_contacts = false })
   eq(config.sources.per_filetype.mail, original, "disable restores original callback")
-  mail.setup({ treesitter = false })
+  mail.setup({ treesitter = false, phrases = {} })
   eq(config.sources.per_filetype.mail, original, "no command leaves sources alone")
   mail.setup({ treesitter = false, contacts_eval = provider() })
   local replacement = { "buffer" }
@@ -293,7 +293,7 @@ if parser_path and parser_path ~= "" then
     local name = query.captures[id]
     captures[name] = (captures[name] or 0) + 1
     if node:type() == "quote_symbol" then
-      eq((metadata[id] or metadata).conceal, "┃", "quote conceal")
+      eq((metadata[id] or metadata).conceal, nil, "view owns quote conceal independently of the highlighter")
     end
   end
   check(captures.address_field, "address capture")

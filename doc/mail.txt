@@ -8,10 +8,27 @@ Mutt/NeoMutt temporary files; use :setfiletype mail for other filenames.
 
 Defaults: >lua
   require("mail").setup({
-    cmp_contacts = true,
+    cmp_contacts = true, -- register completion for contacts and phrases
     contacts_eval = nil,
     contacts_timeout = 3000, -- milliseconds
     contacts_only = true, -- Blink: only contacts during address completion
+    phrases = {
+      best = "Best,\nJohannes",
+      groetjes = "Groetjes,\nJohannes",
+      sounds = "Sounds good to me.",
+      thanks = "Thanks for your help.",
+      followup = "Just following up on my previous email.",
+      attached = "Please find the document attached.",
+    },
+    fold_quotes = true,
+    draft_check = true,
+    image_picker = "nnn", -- executable name or path, without arguments
+    image_keymap = "<localleader>mi", -- Normal mode; false disables the shortcut
+    view = {
+      enabled = true,
+      quote_char = "┃", -- use "│" for a thinner bar
+      keymap = "<localleader>mv", -- Normal mode; false disables the shortcut
+    },
     treesitter = true,
     parser = nil, -- preserve an existing nvim-treesitter parser registration
   })
@@ -45,14 +62,51 @@ mail, then restart Neovim. :TSInstall mail skips an already installed parser;
 Custom queries must also use node names from the current grammar (for example,
 body instead of the older text_block).
 
-:TSInstall markdown markdown_inline enables Markdown inside the body. Quoted
-mail uses six highlight levels; deeper quotes use level six. To display the
-quote bars, set conceallevel in a mail FileType autocmd: >lua
-  vim.api.nvim_create_autocmd("FileType", {
-    pattern = "mail",
-    callback = function() vim.wo.conceallevel = 2 end,
+:TSInstall markdown markdown_inline enables Markdown inside the body.
+
+VIEW                                                         *mail-view*
+
+The mail view is enabled by default. It displays colored quote bars, underlined
+links, and aligned Markdown tables with borders. Markdown emphasis and link
+syntax are concealed using Neovim's Tree-sitter queries. The draft itself is
+never changed. This needs Tree-sitter; install mail, markdown and markdown_inline.
+
+The cursor line shows its source. Moving into a table reveals its source layout;
+moving out restores the borders. Tables also show their source during Visual
+selection. If a draft is open in several windows, a table being edited in one
+window shows its source in all of them.
+
+Use :MailViewToggle or <localleader>mv (usually \mv) to toggle the view for the
+current draft. The shortcut is buffer-local and respects existing mappings.
+To disable the view by default: >lua
+  require("mail").setup({ view = false })
+<
+For thinner quote bars or a different shortcut: >lua
+  require("mail").setup({
+    view = { quote_char = "│", keymap = "<localleader>v" },
   })
 <
+view = true restores the defaults. Set view.keymap = false to leave the shortcut
+unmapped. Quoted mail uses six colors; deeper quotes use level six. Highlight
+groups are MailQuote1 through MailQuote6, MailLink, MailTableHeader and
+MailTableBorder; define them in your colorscheme to change their appearance.
+
+While a mail buffer is displayed, the view sets conceallevel=2 (0 when disabled)
+and concealcursor="". Previous window settings are restored when leaving mail.
+Other filetypes and their Tree-sitter queries are unaffected.
+
+FOLDING                                                      *mail-folding*
+
+By default, the most recent quoted reply (one > prefix) stays open. Older
+history nested with >> or deeper starts folded. This uses quote depth; messages
+that put every historical reply at the same depth cannot be distinguished.
+The message text is unchanged, and code fences are excluded from quote detection.
+
+Use zo to open a fold, zc to close it, and zR to open all folds. Manually opened
+folds are preserved when switching windows or returning to the draft.
+Set fold_quotes = false to keep your existing folding configuration.
+Folding works independently of MailViewToggle and does not require a parser.
+
 CONTACTS                                                     *mail-contacts*
 
 Enable the source named cmp-contacts in nvim-cmp: >lua
@@ -114,6 +168,89 @@ In the body, type @ followed by a name to look up a contact (for example,
 the @, name and address. The lookup ends at whitespace or punctuation.
 An @ inside an existing address does not trigger contact completion.
 
+PHRASES                                                      *mail-phrases*
+
+Type ! at the start of a body line or after whitespace to complete a phrase.
+For example, !be offers !best; accepting it inserts two lines: >text
+  Best,
+  Johannes
+<
+The !shortcut is replaced completely. Sign-offs use literal text and newlines;
+there are no snippet placeholders. Other defaults are !groetjes, !sounds,
+!thanks, !followup and !attached. Quoted text, code and headers do not trigger
+phrases. Normal punctuation such as "Hello!" and Markdown images are unaffected.
+
+Phrases use the same cmp-contacts source as contacts, without needing a
+contacts_eval command. With Blink, only that source is active during a phrase
+lookup; normal sources resume afterwards. With nvim-cmp, your existing source
+configuration applies. cmp_contacts = false disables both kinds of completion.
+
+Set phrases to replace the entire list, including the default sign-offs: >lua
+  require("mail").setup({
+    phrases = {
+      best = "Best,\nYour name",
+      thanks = "Thanks for your help.",
+    },
+  })
+<
+Shortcut names contain letters, digits, underscores or hyphens, without !.
+Set phrases = {} to disable phrase completion while keeping contacts.
+
+DRAFT CHECKS                                                 *mail-check*
+
+:MailCheck reports empty subjects, missing recipients, duplicate recipients,
+a missing header/body separator, unfinished placeholders (TODO, FIXME,
+[insert ...], <++>), unexpanded phrase shortcuts, and missing local image files.
+Quoted history and code are skipped for body checks. Placeholders in signatures
+are skipped too. Relative image paths are resolved beside the draft file, or
+against the working directory for unnamed drafts. Remote images are not fetched.
+This checks the draft text; it does not inspect NeoMutt's attachment list.
+
+With draft_check = true (the default), typed :q and :wq commands run these checks
+before executing. If something is found, choose Keep editing or Leave anyway.
+Keep editing is the default and leaves unsaved edits intact. A clean draft
+continues without a prompt. Ordinary :w saves are unaffected.
+
+Checks also cover :q!, :x, :qa, :wqa, command chains such as :w | q, and the
+buffer-local ZZ/ZQ shortcuts when those keys are not already mapped. Commands
+that exit the whole editor check all loaded mail drafts. :cquit remains available
+to abort editing with a failure exit status for NeoMutt.
+
+The guard uses CmdlineLeave: Neovim's QuitPre event cannot reliably cancel a
+quit. Direct programmatic quits and existing <Cmd> mappings bypass CmdlineLeave.
+Route custom quit mappings through the checked Lua entry point: >lua
+  require("mail.check").quit("wq")
+<
+Set draft_check = false to disable automatic checks; :MailCheck still works.
+Findings appear as buffer diagnostics and are cleared when you edit the draft.
+
+IMAGES                                                       *mail-images*
+
+Use :MailImage in the body to open nnn in a floating terminal. The buffer-local
+Normal-mode shortcut is <localleader>mi (usually \mi). Existing mappings are
+left alone. Install nnn separately; image_picker can point to its executable.
+Set image_keymap to another key sequence or false to disable the shortcut.
+
+The picker starts in Neovim's working directory. To start elsewhere: >
+  :MailImage ~/Pictures
+<
+Press Enter on an image to pick it. Space selects multiple images; Enter
+finishes the selection. Ctrl-C cancels, including after selecting files.
+Quitting nnn with no selection also cancels. Enter a description for each image;
+the default is its filename without the extension. Cancel a description prompt
+to leave the draft unchanged.
+
+The picker inserts Markdown at the cursor, for example: >
+  ![A diagram](</home/me/Pictures/diagram%20(final).png>)
+<
+Paths are absolute and escaped; descriptions are treated as literal text.
+Multiple images occupy separate lines. Directories, unreadable files and
+files without a recognized image extension are rejected.
+
+Use this with a Markdown-to-HTML mail workflow. Your mail renderer must embed
+local images as inline attachments; mail.nvim inserts the Markdown and does
+not create MIME attachments. Plain-text mail keeps the link.
+
 NAVIGATION                                                   *mail-navigation*
 
 On first opening a mail buffer, a nonempty In-Reply-To header places the cursor
@@ -124,7 +261,7 @@ press A to append to an empty header value.
 These buffer-local commands jump without changing the message: >
   :MailTo       :MailCc       :MailBcc       :MailSubject       :MailBody
 <
-Missing fields are left alone. No keys are mapped. For example: >lua
+Missing fields are left alone. No navigation keys are mapped. For example: >lua
   vim.api.nvim_create_autocmd("FileType", {
     pattern = "mail",
     callback = function(event)
@@ -142,6 +279,8 @@ MAIL_NVIM_PARSER to an absolute path to the compiled mail parser: >
   MAIL_NVIM_PARSER=/path/to/mail.so make test
 <
 Tests use synthetic contacts and temporary Neovim state under tmp/.
+Set MAIL_NVIM_NNN to the nnn executable to test real image selection and
+cancellation in a terminal as well as the image picker's other checks.
 
 `make test-integration` also tests real dependencies. Set MAIL_NVIM_CMP to an
 nvim-cmp checkout and/or MAIL_NVIM_BLINK_COMPAT to a blink.compat checkout.
@@ -150,6 +289,8 @@ To test parser installation, set MAIL_NVIM_TREESITTER to an nvim-treesitter main
 checkout and MAIL_NVIM_GRAMMAR to a disposable copy of the grammar. The installer
 builds inside that copy and installs under tmp/installed. All paths are absolute.
 MAIL_NVIM_MARKDOWN_PARSERS can point to a directory containing markdown.so and
-markdown_inline.so to check highlighting inside the body too.
+markdown_inline.so to check highlighting inside the body too. Together with
+MAIL_NVIM_PARSER, it also enables `make test` checks of the mail view, including
+rendering in an attached Neovim UI.
 
 vim:tw=78:ts=8:ft=help:norl:

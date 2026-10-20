@@ -1,5 +1,6 @@
 local source = {}
 local headers = require("mail.headers")
+local phrases = require("mail.phrases")
 
 -- A standalone @ starts a body lookup; an @ inside an email address does not.
 -- Stop at punctuation/whitespace so the surrounding sentence stays intact.
@@ -34,6 +35,9 @@ end
 
 function source:get_keyword_pattern()
   local cursor = vim.api.nvim_win_get_cursor(0)
+  if phrases.context(self.config, vim.api.nvim_get_current_buf(), cursor[1], cursor[2]) then
+    return [[!\S*]]
+  end
   if body_recipient(vim.api.nvim_get_current_buf(), cursor[1], cursor[2]) then
     return [[@\S*]]
   end
@@ -42,17 +46,24 @@ function source:get_keyword_pattern()
 end
 
 function source:get_trigger_characters()
-  return { ":", ",", " ", "@" }
+  return { ":", ",", " ", "@", "!" }
 end
 
 function source:is_available()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  if phrases.context(self.config, vim.api.nvim_get_current_buf(), cursor[1], cursor[2]) then return true end
   if not self.config.contacts_eval then
     return false
   end
-  local cursor = vim.api.nvim_win_get_cursor(0)
   local buf = vim.api.nvim_get_current_buf()
   return headers.address_field(buf, cursor[1], cursor[2]) ~= nil
     or body_recipient(buf, cursor[1], cursor[2]) ~= nil
+end
+
+function source:is_exclusive()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  return phrases.context(self.config, vim.api.nvim_get_current_buf(), cursor[1], cursor[2]) ~= nil
+    or self.config.contacts_only ~= false and self:is_available()
 end
 
 function source:get_debug_name()
@@ -219,6 +230,11 @@ end
 function source:complete(params, callback)
   self:cancel()
   local context = params.context
+  local _, phrase_range = phrases.context(self.config, context.bufnr, context.cursor.row, #context.cursor_before_line)
+  if phrase_range then
+    callback({ items = phrases.items(self.config, phrase_range), isIncomplete = false })
+    return
+  end
   local field = headers.address_field(context.bufnr, context.cursor.row, #context.cursor_before_line)
   if not self.config.contacts_eval then
     callback({ items = {}, isIncomplete = false })
