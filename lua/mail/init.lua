@@ -85,6 +85,7 @@ function M.setup(options)
   require("mail.view").setup()
   require("mail.folds").setup()
   require("mail.check").setup()
+  require("mail.pairs").setup()
   M.register_completion()
   require("mail.autocmds").setup()
 end

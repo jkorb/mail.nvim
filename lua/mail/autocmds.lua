@@ -18,6 +18,7 @@ function M.setup()
     require("mail.view").attach(buf)
     require("mail.folds").sync()
     require("mail.check").attach(buf)
+    require("mail.pairs").attach(buf)
     if pending[buf] or vim.b[buf].mail_initial_cursor then
       return
     end
@@ -54,6 +55,7 @@ function M.setup()
     callback = function(event)
       if vim.bo[event.buf].filetype == "mail" then
         require("mail").register_completion()
+        require("mail.pairs").attach(event.buf)
       end
     end,
   })
@@ -63,6 +65,10 @@ function M.setup()
     callback = function(event)
       if event.data == "blink.cmp" or event.data == "blink.compat" or event.data == "nvim-cmp" then
         vim.schedule(function() require("mail").register_completion() end)
+      elseif event.data == "mini.pairs" then
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+          if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype == "mail" then require("mail.pairs").attach(buf) end
+        end
       end
     end,
   })

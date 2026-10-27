@@ -13,23 +13,23 @@ function M.scan(buf)
   for row, line in ipairs(lines) do
     local depth, text = 0, line
     if separator and row > separator then
-      while text:match("^[ \t]*>") do
+      -- Inside a fence only its outer quote prefix belongs to the message;
+      -- any further > characters are code, including on a would-be closer.
+      while (not fence or depth < fence.depth) and text:match("^ ? ? ?>") do
         depth = depth + 1
-        text = text:gsub("^[ \t]*>[ \t]?", "", 1)
+        text = text:gsub("^ ? ? ?>[ \t]?", "", 1)
       end
-      local code = line:match("^    ") ~= nil or line:match("^\t") ~= nil
+      local code = text:match("^    ") ~= nil or text:match("^\t") ~= nil
       if fence and fence.depth > depth then fence = nil end
       if fence then
-        -- Greater-than signs inside a code block are literal code.
-        if fence.depth == 0 then depth, text = 0, line end
-        depth = math.min(depth, fence.depth)
         code = true
         local closing = text:match("^ ? ? ?([`~]+)%s*$")
         if closing and closing:sub(1, 1) == fence.char and #closing >= fence.length
           and not closing:find("[^" .. fence.char .. "]") then fence = nil end
       else
-        local opening = text:match("^ ? ? ?([`~]+)")
-        if opening and #opening >= 3 and not opening:find("[^" .. opening:sub(1, 1) .. "]") then
+        local opening, info = text:match("^ ? ? ?([`~]+)(.*)$")
+        if opening and #opening >= 3 and not opening:find("[^" .. opening:sub(1, 1) .. "]")
+          and (opening:sub(1, 1) ~= "`" or not info:find("`", 1, true)) then
           fence, code = { char = opening:sub(1, 1), length = #opening, depth = depth }, true
         end
       end

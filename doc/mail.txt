@@ -95,6 +95,12 @@ While a mail buffer is displayed, the view sets conceallevel=2 (0 when disabled)
 and concealcursor="". Previous window settings are restored when leaving mail.
 Other filetypes and their Tree-sitter queries are unaffected.
 
+Code fences and their language labels stay visible, including unfinished fences.
+Quoted code keeps its outer quote bars; > characters inside the code stay literal.
+With mini.pairs, typing three backticks produces three, without an extra paired
+backtick. Inline code still pairs normally. This applies only to mail buffers
+and preserves custom backtick mappings.
+
 FOLDING                                                      *mail-folding*
 
 By default, the most recent quoted reply (one > prefix) stays open. Older
@@ -292,5 +298,8 @@ MAIL_NVIM_MARKDOWN_PARSERS can point to a directory containing markdown.so and
 markdown_inline.so to check highlighting inside the body too. Together with
 MAIL_NVIM_PARSER, it also enables `make test` checks of the mail view, including
 rendering in an attached Neovim UI.
+Set MAIL_NVIM_MINI_PAIRS to a mini.pairs checkout to include real typing,
+backspace and undo checks for code fences.
+Add MAIL_NVIM_LAZYVIM to test with LazyVim's pairing configuration too.
 
 vim:tw=78:ts=8:ft=help:norl:

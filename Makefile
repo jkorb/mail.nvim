@@ -9,6 +9,7 @@ test:
 	$(NVIM) --headless -u NONE -i NONE -l tests/run.lua
 	$(NVIM) --headless -u NONE -i NONE -l tests/images.lua
 	$(NVIM) --headless -u NONE -i NONE -l tests/view.lua
+	$(NVIM) --headless -u NONE -i NONE -l tests/fences.lua
 	$(NVIM) --headless -u NONE -i NONE -l tests/workflow.lua
 
 test-integration:

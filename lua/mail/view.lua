@@ -169,12 +169,12 @@ local function build(buf)
   local body
   parser:for_each_tree(function(tree, language)
     local lang = language:lang()
-    if lang == "mail" then
+    if language == parser then
       walk(tree:root(), function(node)
         if node:type() == "body" then body = range(node) end
         if node:type() == "quote_symbol" then quotes[#quotes + 1] = node end
       end)
-    elseif lang == "markdown" then
+    elseif lang == "markdown" and language:parent() == parser then
       walk(tree:root(), function(node)
         local kind = node:type()
         if kind == "fenced_code_block" or kind == "indented_code_block" or kind == "html_block" then
@@ -182,7 +182,7 @@ local function build(buf)
           return false
         elseif kind == "pipe_table" then tables[#tables + 1] = node end
       end)
-    elseif lang == "markdown_inline" then
+    elseif lang == "markdown_inline" and language:parent() and language:parent():parent() == parser then
       local query_ok, query = pcall(vim.treesitter.query.get, lang, "highlights")
       if query_ok and query then
         for id, node, metadata in query:iter_captures(tree:root(), buf) do
@@ -214,10 +214,16 @@ local function build(buf)
       end)
     end
   end)
+  local body_rows = require("mail.body").scan(buf).rows
+  local quote_counts = {}
   for _, node in ipairs(quotes) do
-    local row, col = node:range()
-    if not contains(code, row, col) then
-      local level = node:parent():type():match("quoted_lvl(%d)") or "1"
+    local row = node:range()
+    quote_counts[row] = (quote_counts[row] or 0) + 1
+    -- Markdown code ranges include block-quote continuations, sometimes even
+    -- the next line's prefix. Keep the outer mail quote bars, while leaving
+    -- literal > characters inside the code untouched.
+    if body_rows[row + 1] and quote_counts[row] <= body_rows[row + 1].depth then
+      local level = math.min(body_rows[row + 1].depth, 6)
       mark(plan, node, { conceal = require("mail").config.view.quote_char, hl_group = "MailQuote" .. level, priority = 150 })
     end
   end
